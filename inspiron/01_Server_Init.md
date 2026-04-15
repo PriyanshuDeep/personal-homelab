@@ -1,29 +1,74 @@
-# Server Initialization & Headless OS Provisioning
+# 01 — Server Initialization & Headless OS Provisioning
 
 ## What I Did
-I finally set up my bare-metal server for the homelab. I'm using an old Dell Inspiron 560s (Core 2 Duo, 4GB RAM), so I had to be really strict about saving resources. Instead of setting it up like a desktop, I configured the BIOS and OS to run completely "headless"—meaning no monitor, no keyboard, and absolutely no Graphical User Interface (GUI). I installed Debian 12 in text mode, set up a static IP on my router, and locked down the server so I can only access it securely via SSH keys from my laptop.
+
+Set up my Dell Inspiron 560s as a headless Debian 13 server. "Headless" means no monitor, no keyboard, no GUI — just a box sitting somewhere that I SSH into remotely. This was the right call for a low-resource machine like this (Core 2 Duo, 4GB RAM). Every bit of RAM saved from not running a desktop environment is RAM available for actual services.
+
+I installed Debian 13 (Trixie) in text mode, configured a static IP reservation on my router, locked down SSH to key-only authentication, and set up a clean SSH alias on my laptop so connecting is a single command.
+
+---
 
 ## Challenges
-* **The BIOS Limitations:** The Dell motherboard is customized and didn't have a straightforward "Halt On" setting to ignore missing keyboards, which is a problem for a headless setup.
-* **Storage Paranoia:** I have a 321GB drive for the OS and a 2TB drive full of personal data. I was nervous about accidentally wiping my data drive during the Linux installation.
-* **Typing Passwords:** Constantly typing out my server IP and user password to log in over SSH was getting annoying and isn't good for future automation.
+
+**The BIOS didn't cooperate cleanly.**
+The Dell Inspiron 560s has a pretty customized BIOS that doesn't have a clean "ignore missing keyboard" setting, which is a problem when you want a headless machine that boots without any peripherals attached.
+
+**I was paranoid about the 2TB data drive.**
+I had personal data on it and the Debian installer shows you all your drives at once. One wrong click during partitioning and it's gone. The stock installer flow isn't super obvious about which drive it's targeting.
+
+**Typing the full IP and password every SSH login was getting old fast.**
+It's also bad practice for automation — you can't script anything cleanly if you're manually authenticating every time.
+
+---
 
 ## Solutions
-* **BIOS Hardening:** I disabled unnecessary hardware (like onboard audio and PXE boot) to save IRQs and power. I also set "AC Recovery" to "Power On" so the server automatically boots up if my smart plug cycles the power. The Dell BIOS actually auto-bypasses the keyboard error after a few seconds anyway!
-* **LVM Partitioning:** I specifically selected the 321GB drive and used LVM (Logical Volume Management). I left the 2TB drive completely untouched for now. 
-* **Static IP Block:** On my Mercusys router, I assigned the server a static IP (`192.168.x.10`) that is outside my normal dynamic DHCP pool. I kept it at `.10` so I have room to assign `.11`, `.12`, etc., to my future IP cameras.
-* **Passwordless SSH:** I pushed my laptop's ED25519 public key to the server using `ssh-copy-id`. To make it seamless, I set up a local `~/.ssh/config` alias so I can just type `ssh inspiron`. Finally, I edited `/etc/ssh/sshd_config` on the server and changed `PasswordAuthentication no`, locking out anyone trying to guess a password.
+
+**BIOS hardening:**
+I went through the BIOS and disabled everything that wasn't needed — onboard audio, PXE boot, anything burning IRQs for no reason. For the keyboard issue, the Dell BIOS actually auto-bypasses the "keyboard not found" error after a few seconds on its own, so it wasn't a real blocker. I also set **AC Recovery to "Power On"** so the server automatically boots back up after a power cut or if I cycle it with a smart plug. No manual intervention needed.
+
+**LVM partitioning to protect the data drive:**
+During the Debian install, I manually selected the 321GB OS drive and used LVM (Logical Volume Manager) partitioning on it. I completely ignored the 2TB drive during this step. LVM also means I can resize my root volume later without reinstalling — useful when Docker logs eventually start eating storage.
+
+**Static IP + SSH config alias + key-only auth:**
+Three things working together here:
+- Assigned a static IP (`192.168.1.10`) to the server on my Mercusys router via DHCP reservation. I put it at `.10` to leave room for IP cameras and other devices at `.11`, `.12`, etc.
+- Generated an Ed25519 keypair on my laptop and pushed the public key to the server with `ssh-copy-id`.
+- Created a `~/.ssh/config` entry on my laptop so I can just type `ssh inspiron` instead of the full address.
+- Disabled password authentication entirely in `/etc/ssh/sshd_config`.
+
+---
 
 ## Learnings
-* **LVM vs. Standard Partitions:** I used to just pick manual partitioning from tutorials. Now I know LVM is the professional standard because it lets you resize volumes dynamically while the server is running—super useful for when Docker logs eventually eat up my storage space.
-* **Identity vs. Routing:** Pushing an SSH key attaches it to the user account on the server, not the IP address. This means when I eventually set up Tailscale (VPN) to access this outside the house, my SSH keys will still work perfectly without needing to be re-copied.
-* **Skipping the Root Password:** Leaving the root password blank during the Debian install automatically locks the root account and sets up the standard user with `sudo`. It's way more secure.
 
-## Notes & Code Snippets
-My local client-side `~/.ssh/config` block looks like this:
+**LVM vs standard partitions:**
+I used to just pick "guided partitioning" from tutorials and not think about it. Now I understand why LVM is the professional standard — it creates an abstraction layer between your logical volumes and physical disks, which means you can grow, shrink, and snapshot volumes while the system is live. That's not a nice-to-have in production, it's essential.
 
-```text
+**SSH keys are tied to user accounts, not IPs:**
+This clicked for me when I set up Tailscale later. My SSH key was pushed to `~/.ssh/authorized_keys` on the server — that's a file in my user's home directory. It doesn't care what IP I'm connecting from. So when I started accessing the server over the Tailscale IP instead of the local IP, my keys worked perfectly without any changes.
+
+**Skipping the root password during Debian install:**
+If you leave the root password blank during the Debian installer, it automatically locks the root account and gives your main user full `sudo` access instead. That's actually more secure than having a separate root password you might forget or reuse somewhere.
+
+---
+
+## Notes & Configuration
+
+### SSH Config on `pavilion` (`~/.ssh/config`)
+
+```
 Host inspiron
-    HostName 192.168.x.x
-    User [REDACTED_USERNAME]
+    HostName 100.98.79.12
+    User priyanshudeep
     IdentityFile ~/.ssh/id_ed25519
+```
+
+> Using the Tailscale IP here instead of the local IP so this works from anywhere — home network, mobile data, anywhere.
+
+### Key sshd_config changes on `inspiron`
+
+```
+PasswordAuthentication no
+PubkeyAuthentication yes
+```
+
+Applied with: `sudo systemctl restart ssh`
