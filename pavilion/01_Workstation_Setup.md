@@ -1,20 +1,110 @@
-# Phase 1: Pavilion Workstation Setup & Hardening
+# 01 — Workstation Setup & Initial Hardening
 
-## Overview
-I just did a fresh install of Fedora 43 Workstation on my HP Pavilion laptop (Ryzen 5 / RTX 3050). I am setting this up as my daily driver and main machine for my homelab and DevOps learning. The goal today was just to get a stable, fast baseline running using the new `dnf5` package manager without draining my battery unnecessarily. 
+## What I Did
 
-## Challenges I Faced
-1. **Super Slow Updates:** When I ran my first system update, the terminal was painfully slow and kept throwing a `Curl error 28` timeout. My internet is 30 Mbps, but the system was trying to download packages from a mirror way over in Japan.
-2. **The Whole System Froze:** While downloading and installing over 2,200 packages, my laptop completely locked up. The screen froze, I couldn't click anything, and I was just stuck.
+Fresh install of Fedora 43 KDE Plasma on my HP Pavilion Gaming Laptop (Ryzen 5 5600H, RTX 3050 Mobile, 16GB RAM). This is my daily driver and control node for the homelab — everything I do on the server goes through this machine. The goal for this phase was a clean, stable baseline: system fully updated, SSH access to the server working, and Tailscale connected so I can reach the server from anywhere.
 
-## How I Solved Them
-* **Fixing the Slow Downloads:** Instead of just dealing with it, I went into the configuration file (`/etc/dnf/dnf.conf`) and added `fastestmirror=True` and `max_parallel_downloads=10`. This forced the system to find the fastest server near me and download 10 things at once. It maxed out my internet speed and fixed the timeouts perfectly.
-* **Recovering from the Freeze:** I ended up having to do a hard hardware reboot. When it booted back up, I immediately ran `sudo dnf5 clean all` to wipe out the corrupted cache from the crash. Then I ran `sudo dnf5 upgrade --refresh` to safely rebuild everything and finish the update without losing any data.
+---
 
-## What I Learned
-* **Don't Panic on a Crash:** I learned about the difference between User Space (where my graphical interface froze) and Kernel Space. Also, modern package managers like `dnf5` are actually really tough; if you clean the cache properly after a hard power loss, it can recover safely.
-* **Public/Private Keys:** I finally understood how SSH keys work (the "padlock and master key" concept) instead of just using passwords for everything. 
+## Challenges
 
-## Important Notes & Configs
-* **Hybrid Graphics (Saving Battery):** I installed the proprietary NVIDIA drivers (`akmod-nvidia`). Since I want to save battery for daily tasks, I created an alias called `nvrun` in my `.bashrc`. By default, the laptop uses the Ryzen integrated graphics. But if I want to force a heavy app to use the RTX 3050, I just type `nvrun` before the command.
-* **My SSH Key:** I generated my first ED25519 SSH keypair to act as my "digital passport" for connecting to GitHub and my future server securely. I used a specific, detailed naming convention for the key to keep my hardware organized, and the private key/passphrase are kept strictly local and secure.
+**System updates were painfully slow with timeouts.**
+First `dnf upgrade` after a fresh Fedora install kept stalling with `Curl error 28` (connection timeout). My internet is fine — the problem was that DNF was pulling packages from a mirror in Japan by default.
+
+**The whole system froze mid-update.**
+While downloading and installing 2,200+ packages, my laptop completely locked up. Couldn't click anything, keyboard unresponsive. Full freeze.
+
+---
+
+## Solutions
+
+**Fixing the slow mirrors:**
+Edited `/etc/dnf/dnf.conf` and added two lines:
+
+```ini
+fastestmirror=True
+max_parallel_downloads=10
+```
+
+`fastestmirror` makes DNF benchmark nearby mirrors and pick the fastest one automatically. `max_parallel_downloads=10` lets it download 10 packages simultaneously instead of one at a time. After this, updates maxed out my connection speed and the timeouts stopped completely.
+
+**Recovering from the freeze:**
+Hard rebooted. When the system came back up, I ran:
+
+```bash
+sudo dnf5 clean all
+sudo dnf5 upgrade --refresh
+```
+
+`clean all` wipes the package cache — important after a hard power loss because partial downloads can corrupt the cache. `--refresh` forces DNF to re-fetch the latest metadata from the repos. Everything rebuilt cleanly, no data loss.
+
+---
+
+## SSH Setup & Server Access
+
+Generated an Ed25519 keypair on this machine to use as my "digital passport" for both GitHub and the server:
+
+```bash
+ssh-keygen -t ed25519 -C "priyanshudeep@pavilion"
+```
+
+Pushed the public key to the server:
+
+```bash
+ssh-copy-id priyanshudeep@192.168.1.10
+```
+
+Set up a `~/.ssh/config` alias so connecting is just `ssh inspiron`:
+
+```
+Host inspiron
+    HostName 100.98.79.12
+    User priyanshudeep
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+Using the Tailscale IP instead of the local IP means this alias works from anywhere, not just when I'm home.
+
+---
+
+## Tailscale
+
+Installed Tailscale on the laptop and connected it to my Tailscale account (professional Microsoft account). The Fedora 43 / DNF5 quirk here is covered in detail in the server's [03_Zero_Trust_Network.md](../inspiron/03_Zero_Trust_Network.md) — same fix applies on the laptop side.
+
+Pavilion's Tailscale IP: `100.102.43.106`
+
+---
+
+## KDE Dolphin Integration
+
+Connected to the server's storage directly from Dolphin using KIO:
+
+```
+sftp://inspiron/mnt/2TB_Storage
+```
+
+Pinned to the sidebar. I can now drag and drop files between my laptop and the server's 2TB drive exactly like a local folder. No terminal needed for basic file transfers.
+
+---
+
+## Learnings
+
+**DNF5 is a full rewrite, not just an update.**
+Fedora 40+ ships with DNF5, which has different command syntax and different config behavior compared to the old DNF. A lot of guides online are written for the old DNF. When something doesn't work, check whether the command has changed in DNF5 before assuming the guide is wrong.
+
+**`clean all` after a hard crash is not optional.**
+The package manager maintains a cache of downloaded files. If the system dies mid-download, that cache can have corrupted partial files. Running `clean all` first ensures you're starting fresh rather than trying to resume from a broken state.
+
+**SSH keys are per-device on purpose.**
+Each machine I use to access the server has its own keypair. This isn't just tidiness — it means if one device is compromised or lost, I revoke exactly that key and nothing else changes. Shared keys are a security anti-pattern.
+
+---
+
+## Current State
+
+- [x] Fedora 43 installed and fully updated
+- [x] DNF5 optimized (fastestmirror, parallel downloads)
+- [x] Ed25519 SSH keypair generated
+- [x] SSH access to `inspiron` working via `ssh inspiron`
+- [x] Tailscale connected (`100.102.43.106`)
+- [x] KDE Dolphin / KIO SFTP integration working
