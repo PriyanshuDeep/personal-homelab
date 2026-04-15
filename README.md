@@ -66,7 +66,7 @@ personal-homelab/
 - [x] 2TB drive formatted to XFS, mounted at `/mnt/2TB_Storage`, fstab with `nofail`
 - [x] Tailscale installed bare-metal (not in Docker — intentional)
 - [x] Docker Engine installed and verified
-- [ ] Deploy service stacks (Dockge, Nginx Proxy Manager, Jellyfin, Uptime Kuma)
+- [x] Deploy service stacks (Dockge, Nginx Proxy Manager, Jellyfin, Uptime Kuma)
 - [ ] Automated rsync backups
 - [ ] Monitoring and alerting
 
