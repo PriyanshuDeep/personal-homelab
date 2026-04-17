@@ -75,4 +75,5 @@ personal-homelab/
 - [x] SSH keypair generated, server access configured
 - [x] Tailscale installed and connected
 - [x] KDE Dolphin / KIO SFTP integration to server
+- [x] Local AI stack deployed (Ollama + Open WebUI + Qwen 2.5 Coder)
 - [ ] Full dev environment setup (Git, VSCode, etc.)
